@@ -1,0 +1,133 @@
+import gradio as gr
+from database.sessions import refresh_session_choices, create_session
+from app.ui_utils import ui_delete_chat, ui_select_chat, ui_send, ui_new_chat, ui_upload_pdfs
+
+
+def build_app():
+    with gr.Blocks(title="PDF RAG Chat (with History)") as demo:
+        gr.Markdown("## PDF RAG Chatbot (Chroma) — 업로드한 PDF 기반 + 근거 부족 시 arXiv 자동 수집")
+
+        session_id = gr.State(value="")
+
+        with gr.Row():
+            # Left: chat history
+            with gr.Column(scale=1, min_width=280):
+                gr.Markdown("### Chat History")
+
+                session_dropdown = gr.Dropdown(
+                    label="세션 선택",
+                    choices=refresh_session_choices(),
+                    value=None,
+                    interactive=True,
+                )
+
+                btn_new = gr.Button("New Chat", variant="primary")
+                btn_delete = gr.Button("Delete Chat", variant="stop")
+
+                gr.Markdown("### Session Metadata Filter (선택)")
+                gr.Markdown('- 예: `{"filename": {"$eq": "paper"}}`')
+                session_filter_json = gr.Textbox(
+                    label="Filter(JSON)",
+                    placeholder='{"filename":{"$eq":"paper"}}',
+                    lines=3,
+                )
+
+                gr.Markdown("### PDF 업로드 (DB 추가)")
+                pdf_files = gr.File(
+                    label="PDF 파일 업로드",
+                    file_types=[".pdf"],
+                    file_count="multiple",
+                )
+                upload_status = gr.Textbox(label="업로드 상태", lines=6)
+
+            # Right: chat
+            with gr.Column(scale=3):
+                gr.Markdown("### Chat")
+                chatbot = gr.Chatbot(height=520)
+                user_text = gr.Textbox(
+                    label="질문 입력",
+                    placeholder="질문을 입력하세요. (필터: @file=xxx.pdf / @page=3 / @doc_id=... / @filter={...})",
+                    lines=2,
+                )
+                with gr.Row():
+                    btn_send = gr.Button("Send", variant="primary")
+                    btn_clear = gr.Button("Clear Chat UI")
+
+                status = gr.Markdown("")
+
+        # New chat
+        def _new_chat():
+            sid, choices, empty_chat, _, msg = ui_new_chat()
+            return sid, gr.Dropdown(choices=choices, value=sid), empty_chat, msg
+
+        btn_new.click(
+            _new_chat,
+            inputs=[],
+            outputs=[session_id, session_dropdown, chatbot, status],
+        )
+
+        # Delete chat
+        def _delete_chat(sid: str):
+            new_id, choices, empty_chat, msg = ui_delete_chat(sid)
+            return new_id, gr.Dropdown(choices=choices, value=new_id), empty_chat, msg
+
+        btn_delete.click(
+            _delete_chat,
+            inputs=[session_id],
+            outputs=[session_id, session_dropdown, chatbot, status],
+        )
+
+        # Select chat
+        def _select_chat(dd_value: str):
+            # dd_value is session_id
+            if not dd_value:
+                return "", [], "세션을 선택하세요."
+            chat, msg = ui_select_chat(dd_value)
+            return dd_value, chat, msg
+
+        session_dropdown.change(
+            _select_chat,
+            inputs=[session_dropdown],
+            outputs=[session_id, chatbot, status],
+        )
+
+        # Upload PDFs
+        def _upload(sid: str, files):
+            # gr.File passes list of TemporaryFile objects with .name
+            msg = ui_upload_pdfs(sid, files or [])
+            return msg
+
+        pdf_files.change(
+            _upload,
+            inputs=[session_id, pdf_files],
+            outputs=[upload_status],
+        )
+
+        # Send message
+        btn_send.click(
+            ui_send,
+            inputs=[session_id, chatbot, user_text, session_filter_json],
+            outputs=[session_id, chatbot, status, user_text],
+        )
+
+        # Enter to send
+        user_text.submit(
+            ui_send,
+            inputs=[session_id, chatbot, user_text, session_filter_json],
+            outputs=[session_id, chatbot, status, user_text],
+        )
+
+        # Clear UI only (does not delete stored history)
+        def _clear_ui():
+            return [], ""
+
+        btn_clear.click(_clear_ui, inputs=[], outputs=[chatbot, user_text])
+
+        # Initial auto-create a session if none
+        def _init():
+            sid = create_session("New Chat")
+            return sid, gr.Dropdown(choices=refresh_session_choices(), value=sid), [], "준비 완료"
+
+        demo.load(_init, inputs=[], outputs=[session_id, session_dropdown, chatbot, status])
+
+    return demo
