@@ -15,7 +15,7 @@ def retrieve_with_scores(
         res = db.similarity_search_with_relevance_scores(question, k=top_k)
 
     if not res:
-        print("유사한 문서가 없습니다.")
+        print("Could not find any simmilar documents")
 
     return res
 

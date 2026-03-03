@@ -103,8 +103,8 @@ def pmc_search(query: str, max_results: int = PMC_MAX_RESULTS) -> list[PmcPaper]
             missing_pdf += 1
 
     if missing_pdf:
-        print(f"[PMC] PDF URL 없음: {missing_pdf}")
-    print(f"[PMC] PDF URL 확보: {len(res)}")
+        print(f"[PMC] Could not find PDF URL: {missing_pdf}")
+    print(f"[PMC] Successfully get PDF URL: {len(res)}")
 
     return res
 
@@ -130,16 +130,13 @@ def pubmed_search_abstracts(query: str, max_results: int = PUBMED_MAX_RESULTS) -
         data = json.loads(response.read().decode("utf-8"))
     id_list = data.get("esearchresult", dict()).get("idlist", list())
     if not id_list:
-        print("[PubMed] 검색 결과가 없습니다.")
+        print("[PubMed] We could not find any documents")
         return res
 
-    print(f"[PubMed] 검색 결과 수: {len(id_list)}")
+    print(f"[PubMed] The number of retrieved documents: {len(id_list)}")
 
     ids = ",".join(id_list)
-    fetch_url = (
-        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
-        f"?db=pubmed&id={ids}&retmode=xml"
-    )
+    fetch_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi" f"?db=pubmed&id={ids}&retmode=xml"
     with urllib.request.urlopen(fetch_url, timeout=25) as response:
         xml_data = response.read()
 
@@ -164,7 +161,7 @@ def pubmed_search_abstracts(query: str, max_results: int = PUBMED_MAX_RESULTS) -
         if pmid and title and abstract:
             res.append(PubmedPaper(pmid=pmid, title=title, abstract=abstract, journal=journal, pub_date=pub_date))
 
-    print(f"[PubMed] 초록 추출 성공: {len(res)}")
+    print(f"[PubMed] Successfully extrated abstract: {len(res)}")
     return res
 
 

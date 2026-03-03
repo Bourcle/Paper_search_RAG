@@ -9,14 +9,14 @@ import gradio as gr
 
 
 def print_help():
-    print("\n명령 도움말:")
-    print("  /add <pdf_path>        : PDF를 벡터DB에 추가")
-    print("  /where <json_filter>   : 다음 질문에 메타데이터 필터 적용 (Chroma filter 문법)")
-    print("  /clearwhere            : 필터 해제")
-    print("  /exit                  : 종료")
-    print("\n질문에 인라인 필터도 가능:")
-    print('  예) "이 논문 결론 요약해줘 @file=paper.pdf"')
-    print('  예) "p3에서 실험 세팅? @file=paper.pdf @page=3"')
+    print("\nHelp:")
+    print("  /add <pdf_path>        : Add PDF on Vector DB")
+    print("  /where <json_filter>   : Apply meta data filter on next question (Chroma filter grammar)")
+    print("  /clearwhere            : Clear filter")
+    print("  /exit                  : Exit")
+    print("\nIn-line filter is also available:")
+    print('  예) "Summerize the conclusion of this paper @file=paper.pdf"')
+    print('  예) "Experiment setting on p3? @file=paper.pdf @page=3"')
     print('  예) "..." @filter={"filename":{"$eq":"paper"}}')
 
 
@@ -32,28 +32,28 @@ def refresh_session_choices() -> list[tuple[str, str]]:
 def ui_new_chat() -> tuple[str, list[tuple[str, str]], list[tuple[str, str]], str, str]:
     sid = create_session("New Chat")
     choices = refresh_session_choices()
-    return sid, choices, [], "", "새 채팅을 시작했습니다."
+    return sid, choices, [], "", "New Chat just started"
 
 
 def ui_select_chat(session_id: str) -> tuple[list[dict[str, str]], str]:
     if not session_id:
-        return [], "세션이 선택되지 않았습니다."
+        return [], "Please choose session"
     chat = load_chat(session_id)
-    return chat, "채팅 히스토리를 불러왔습니다."
+    return chat, "Chat history is loaded"
 
 
 def ui_delete_chat(session_id: str) -> tuple[str, list[tuple[str, str]], list[tuple[str, str]], str]:
     if not session_id:
-        return "", refresh_session_choices(), [], "삭제할 세션이 없습니다."
+        return "", refresh_session_choices(), [], "There is no session to delete"
     delete_session(session_id)
     # create a new one
     new_id = create_session("New Chat")
-    return new_id, refresh_session_choices(), [], "채팅을 삭제하고 새 채팅을 시작했습니다."
+    return new_id, refresh_session_choices(), [], "Delete current chat and start a new chatting"
 
 
 def ui_upload_pdfs(session_id: str, files: list[gr.File]) -> str:
     if not files:
-        return "업로드된 파일이 없습니다."
+        return "We don't have any uploaded file"
     if not session_id:
         session_id = create_session("New Chat")
 
@@ -63,11 +63,11 @@ def ui_upload_pdfs(session_id: str, files: list[gr.File]) -> str:
             p = ensure_pdf(f.name)
             if p:
                 n = add_pdf_to_db(VECTOR_DB, f.name)
-                msgs.append(f"{f.name} 추가 완료 (chunks={n})")
+                msgs.append(f"{f.name} Added (chunks={n})")
             else:
-                print("pdf가 올바르지 않습니다.")
+                print("pdf format is not right")
         except Exception as e:
-            msgs.append(f"{getattr(f,'name','(unknown)')} 추가 실패: {repr(e)}")
+            msgs.append(f"{getattr(f,'name','(unknown)')} filed to add: {repr(e)}")
 
     # store a system-like message to history
     add_message(session_id, "assistant", "\n".join(msgs))
@@ -93,7 +93,7 @@ def ui_send(
     """
     user_text = (user_text or "").strip()
     if not user_text:
-        yield session_id, chat, "입력된 질문이 없습니다."
+        yield session_id, chat, "Please ask a question."
         return
 
     if not session_id:
@@ -106,14 +106,14 @@ def ui_send(
         try:
             session_filter = json.loads(sf)
         except Exception:
-            yield session_id, chat, 'Session filter JSON 파싱 실패. 예: {"filename": {"$eq": "paper"}}'
+            yield session_id, chat, 'Failed to parse Session filter JSON . e.g. {"filename": {"$eq": "paper"}}'
             return
 
     # append user message
     chat = chat or []
     chat.append({"role": "user", "content": user_text})
     chat.append({"role": "assistant", "content": ""})
-    yield session_id, chat, "검색 중...", ""
+    yield session_id, chat, "Searching...", ""
 
     add_message(session_id, "user", user_text)
     maybe_set_title(session_id, user_text)
@@ -124,10 +124,10 @@ def ui_send(
     # if insufficient -> fetch paper -> retry once
     if ans == INSUFFICIENT_MSG:
         # show interim to user
-        interim = f"{INSUFFICIENT_MSG}\n\n(벡터DB에 근거가 부족해 Web에서 관련 논문을 자동 검색/추가 후 재시도합니다.)"
+        interim = f"{INSUFFICIENT_MSG}\n\n(Retry to generate the answer after adding web retrieved documents since we need more evidence in vector DB.)"
         for part in stream_text(interim, delay=0.005):
             chat[-1]["content"] = part
-            yield session_id, chat, "Web 검색/다운로드 중...", ""
+            yield session_id, chat, "Web Search/Downloading...", ""
         add_message(session_id, "assistant", interim)
 
         downloaded = auto_fetch_and_ingest(VECTOR_DB, user_text)
@@ -136,7 +136,7 @@ def ui_send(
                 fname = Path(downloaded).name
             except Exception:
                 fname = str(downloaded)
-            note = f"논문 추가됨: {fname}"
+            note = f"Paper added: {fname}"
             # 노트는 상태로만 보여줘도 되고, 채팅에 남겨도 됨(여기선 상태로만)
             yield session_id, chat, note, ""
             add_message(session_id, "assistant", note)
@@ -144,24 +144,24 @@ def ui_send(
             ans2, _, _ = answer_from_db(VECTOR_DB, QA_CHAIN, user_text, session_filter=session_filter)
             for part in stream_text(ans2, delay=0.004):
                 chat[-1]["content"] = part
-                yield session_id, chat, "답변 생성 중...", ""
+                yield session_id, chat, "Generating the answer...", ""
             add_message(session_id, "assistant", ans2)
-            yield session_id, chat, "답변 완료", ""
+            yield session_id, chat, "Done", ""
             return
         else:
-            final = f"{INSUFFICIENT_MSG}\n\n(Web에서 적절한 PDF를 가져오지 못했습니다.)"
+            final = f"{INSUFFICIENT_MSG}\n\n(We could not find any appropriate document on Web.)"
             for part in stream_text(final, delay=0.004):
                 chat[-1]["content"] = part
-                yield session_id, chat, "Web 자동 수집 실패", ""
+                yield session_id, chat, "Web retrieving failed", ""
 
             add_message(session_id, "assistant", final)
-            yield session_id, chat, "Web 자동 수집 실패", ""
+            yield session_id, chat, "Web retrieving failed", ""
             return
 
     # normal answer
     for part in stream_text(ans, delay=0.004):
         chat[-1]["content"] = part
-        yield session_id, chat, "답변 생성 중...", ""
+        yield session_id, chat, "Generating the answer...", ""
 
     add_message(session_id, "assistant", ans)
-    yield session_id, chat, "답변 완료", ""
+    yield session_id, chat, "Done", ""
