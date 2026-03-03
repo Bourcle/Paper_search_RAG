@@ -15,3 +15,4 @@ src/chroma_db
 .vscode
 data/
 .DS_Store
+**/.DS_Store

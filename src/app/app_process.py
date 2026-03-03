@@ -5,7 +5,9 @@ from app.ui_utils import ui_delete_chat, ui_select_chat, ui_send, ui_new_chat, u
 
 def build_app():
     with gr.Blocks(title="PDF RAG Chat (with History)") as demo:
-        gr.Markdown("## PDF RAG Chatbot (Chroma) — 업로드한 PDF 기반 + 근거 부족 시 arXiv 자동 수집")
+        gr.Markdown(
+            "## PDF RAG Chatbot (Chroma) — Based on uploaded PDF + automatically retrieved documents when it needs more evidence"
+        )
 
         session_id = gr.State(value="")
 
@@ -15,7 +17,7 @@ def build_app():
                 gr.Markdown("### Chat History")
 
                 session_dropdown = gr.Dropdown(
-                    label="세션 선택",
+                    label="Select Session",
                     choices=refresh_session_choices(),
                     value=None,
                     interactive=True,
@@ -24,7 +26,7 @@ def build_app():
                 btn_new = gr.Button("New Chat", variant="primary")
                 btn_delete = gr.Button("Delete Chat", variant="stop")
 
-                gr.Markdown("### Session Metadata Filter (선택)")
+                gr.Markdown("### Session Metadata Filter (Optional)")
                 gr.Markdown('- 예: `{"filename": {"$eq": "paper"}}`')
                 session_filter_json = gr.Textbox(
                     label="Filter(JSON)",
@@ -32,21 +34,21 @@ def build_app():
                     lines=3,
                 )
 
-                gr.Markdown("### PDF 업로드 (DB 추가)")
+                gr.Markdown("### Upload PDF (Add on DB)")
                 pdf_files = gr.File(
-                    label="PDF 파일 업로드",
+                    label="Upload PDF",
                     file_types=[".pdf"],
                     file_count="multiple",
                 )
-                upload_status = gr.Textbox(label="업로드 상태", lines=6)
+                upload_status = gr.Textbox(label="Upload status", lines=6)
 
             # Right: chat
             with gr.Column(scale=3):
                 gr.Markdown("### Chat")
                 chatbot = gr.Chatbot(height=520)
                 user_text = gr.Textbox(
-                    label="질문 입력",
-                    placeholder="질문을 입력하세요. (필터: @file=xxx.pdf / @page=3 / @doc_id=... / @filter={...})",
+                    label="Insert question",
+                    placeholder="Please ask me (필터: @file=xxx.pdf / @page=3 / @doc_id=... / @filter={...})",
                     lines=2,
                 )
                 with gr.Row():
@@ -81,7 +83,7 @@ def build_app():
         def _select_chat(dd_value: str):
             # dd_value is session_id
             if not dd_value:
-                return "", [], "세션을 선택하세요."
+                return "", [], "Please select a session."
             chat, msg = ui_select_chat(dd_value)
             return dd_value, chat, msg
 
@@ -126,7 +128,7 @@ def build_app():
         # Initial auto-create a session if none
         def _init():
             sid = create_session("New Chat")
-            return sid, gr.Dropdown(choices=refresh_session_choices(), value=sid), [], "준비 완료"
+            return sid, gr.Dropdown(choices=refresh_session_choices(), value=sid), [], "Ready"
 
         demo.load(_init, inputs=[], outputs=[session_id, session_dropdown, chatbot, status])
 

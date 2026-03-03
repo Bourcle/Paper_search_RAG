@@ -13,10 +13,10 @@ def ensure_pdf(path_to_pdf: str) -> bool:
     res = True
     if not os.path.exists(path_to_pdf):
         res = False
-        raise FileNotFoundError(f"파일이 없습니다. {path_to_pdf}")
-    if path_to_pdf.split(".")[-1].lower() != "pdf":
+        raise FileNotFoundError(f"No file found on {path_to_pdf}")
+    if not path_to_pdf.lower().endswith(".pdf"):
         res = False
-        raise ValueError(f"PDF만 지원합니다. 받은 파일: {path_to_pdf.split('.')[-1].lower()}")
+        raise ValueError(f"We only support PDF. Current file : {path_to_pdf.split('.')[-1].lower()}")
 
     return res
 
@@ -106,11 +106,11 @@ def download_pdf_checked(url: str, out_dir: str, filename_hint: str) -> str:
 
     # Some endpoints may return HTML (e.g., consent page / 403 page)
     if "pdf" not in ctype and body[:200].lstrip().startswith(b"<"):
-        raise RuntimeError(f"PDF가 아닌 응답(Content-Type={ctype}). URL={url}")
+        raise RuntimeError(f"Response without PDF(Content-Type={ctype}). URL={url}")
 
     Path(res).write_bytes(body)
 
     if Path(res).stat().st_size < 10000:
-        raise RuntimeError(f"다운로드 파일이 너무 작습니다: {res} ({Path(res).stat().st_size} bytes)")
+        raise RuntimeError(f"The size of file is too small: {res} ({Path(res).stat().st_size} bytes)")
 
     return res
