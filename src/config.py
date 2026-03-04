@@ -1,3 +1,4 @@
+from pathlib import Path
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
@@ -28,8 +29,10 @@ INSUFFICIENT_MSG = "Could not give you an answer since we don't have sufficient 
 DEFAULT_EMB_MODEL = "BAAI/bge-m3"
 DEFAULT_LLM_MODEL = "gpt-4o-mini"
 
-CHAT_DB_PATH = "./chat_history.db"
-DEFAUL_DB_DIR = "./chroma_db"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+CHAT_DB_PATH = str(PROJECT_ROOT / "src/chat_history.db")
+DEFAUL_DB_DIR = str(PROJECT_ROOT / "src/chroma_db")
 DEFAULT_COLLECTION = "papers"
 
 CHUNCK_SIZE = 900
@@ -38,7 +41,7 @@ CHUNK_OVERLAP = 150
 TOP_K = 15  # Top k는 5 - 15 정도가 적당. 5는 너무 evidence가 적고, 20은 의미가 흐려지게 됨
 MIN_RELEVANCE = 0.2
 
-AUTO_PAPERS_DIR = "./data/papers_auto"
+AUTO_PAPERS_DIR = str(PROJECT_ROOT / "data" / "papers_auto")
 ARXIV_MAX_RESULTS = 5
 PMC_MAX_RESULTS = 20
 PUBMED_MAX_RESULTS = 20
@@ -51,7 +54,7 @@ def build_qa_chain(llm_model: str = DEFAULT_LLM_MODEL) -> Callable:
         llm_model (str): OpenAI chat model name.
 
     Returns:
-        Callable: Runnable chain that maps ``{context, question}`` to answer text.
+        Callable: Runnable chain that maps {context, question} to answer text.
     """
 
     prompt = ChatPromptTemplate.from_messages(
@@ -75,7 +78,7 @@ def build_query_rewrite_chain(llm_model: str = DEFAULT_LLM_MODEL):
         llm_model (str): OpenAI chat model name.
 
     Returns:
-        Callable: Runnable chain that maps ``{question}`` to search query text.
+        Callable: Runnable chain that maps {question} to search query text.
     """
 
     prompt = ChatPromptTemplate.from_messages(

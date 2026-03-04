@@ -7,6 +7,43 @@ from database.vector_db import answer_from_db, add_pdf_to_db, auto_fetch_and_ing
 from retreiver.pdf_utils import ensure_pdf
 import gradio as gr
 
+NO_IMPROVEMENT_FETCH_CACHE: set[tuple[str, str]] = set()
+
+
+def _normalize_question_key(text: str) -> str:
+    """Normalize question text for cache key generation.
+
+    Args:
+        text (str): Raw question text.
+
+    Returns:
+        str: Lowercased and whitespace-normalized string.
+    """
+
+    return " ".join((text or "").strip().lower().split())
+
+
+def _build_fetch_status_note(fetch_result: str) -> str:
+    """Build a user-visible status message from fetch result markers.
+
+    Args:
+        fetch_result (str): Result marker returned by ``auto_fetch_and_ingest``.
+
+    Returns:
+        str: Status text for UI.
+    """
+
+    if fetch_result.startswith("pdf_added:"):
+        path = fetch_result.split("pdf_added:", 1)[1]
+        return f"Paper added: {Path(path).name}"
+    if fetch_result.startswith("pdf_existing:"):
+        path = fetch_result.split("pdf_existing:", 1)[1]
+        return f"Paper already indexed: {Path(path).name}"
+    if fetch_result.startswith("pubmed:"):
+        added = fetch_result.split("pubmed:", 1)[1]
+        return f"PubMed abstracts added: {added}"
+    return f"Fetch result: {fetch_result}"
+
 
 def print_help():
     """Print CLI help text for supported commands.
@@ -89,6 +126,9 @@ def ui_delete_chat(session_id: str) -> tuple[str, list[tuple[str, str]], list[tu
 
     if not session_id:
         return "", refresh_session_choices(), [], "There is no session to delete"
+    cache_keys = [key for key in NO_IMPROVEMENT_FETCH_CACHE if key[0] == session_id]
+    for key in cache_keys:
+        NO_IMPROVEMENT_FETCH_CACHE.discard(key)
     delete_session(session_id)
     # create a new one
     new_id = create_session("New Chat")
@@ -200,6 +240,21 @@ def ui_send(
 
     # if insufficient -> fetch paper -> retry once
     if ans == INSUFFICIENT_MSG:
+        question_key = _normalize_question_key(user_text)
+        fetch_cache_key = (session_id, question_key)
+
+        if fetch_cache_key in NO_IMPROVEMENT_FETCH_CACHE:
+            final = (
+                f"{INSUFFICIENT_MSG}\n\n"
+                "(Skipped repeated web search because the same question previously did not improve after retrieval.)"
+            )
+            for part in stream_text(final, delay=0.004):
+                chat[-1]["content"] = part
+                yield session_id, chat, "Skipped repeated web search", ""
+            add_message(session_id, "assistant", final)
+            yield session_id, chat, "Skipped repeated web search", ""
+            return
+
         # show interim to user
         interim = f"{INSUFFICIENT_MSG}\n\n(Retry to generate the answer after adding web retrieved documents since we need more evidence in vector DB.)"
         for part in stream_text(interim, delay=0.005):
@@ -209,12 +264,7 @@ def ui_send(
 
         downloaded = auto_fetch_and_ingest(VECTOR_DB, user_text)
         if downloaded:
-            try:
-                fname = Path(downloaded).name
-            except Exception:
-                fname = str(downloaded)
-            note = f"Paper added: {fname}"
-            # 노트는 상태로만 보여줘도 되고, 채팅에 남겨도 됨(여기선 상태로만)
+            note = _build_fetch_status_note(downloaded)
             yield session_id, chat, note, ""
             add_message(session_id, "assistant", note)
 
@@ -223,6 +273,12 @@ def ui_send(
                 chat[-1]["content"] = part
                 yield session_id, chat, "Generating the answer...", ""
             add_message(session_id, "assistant", ans2)
+
+            if ans2 == INSUFFICIENT_MSG:
+                NO_IMPROVEMENT_FETCH_CACHE.add(fetch_cache_key)
+            else:
+                NO_IMPROVEMENT_FETCH_CACHE.discard(fetch_cache_key)
+
             yield session_id, chat, "Done", ""
             return
         else:
@@ -232,6 +288,7 @@ def ui_send(
                 yield session_id, chat, "Web retrieving failed", ""
 
             add_message(session_id, "assistant", final)
+            NO_IMPROVEMENT_FETCH_CACHE.add(fetch_cache_key)
             yield session_id, chat, "Web retrieving failed", ""
             return
 
