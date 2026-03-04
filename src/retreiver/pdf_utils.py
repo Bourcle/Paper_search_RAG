@@ -16,10 +16,10 @@ def ensure_pdf(path_to_pdf: str) -> bool:
 
     Raises:
         FileNotFoundError: Raised when the file does not exist.
-        ValueError: Raised when the file extension is not ``.pdf``.
+        ValueError: Raised when the file extension is not .pdf.
 
     Returns:
-        bool: ``True`` when the file is a valid PDF path.
+        bool: True when the file is a valid PDF path.
     """
 
     res = True
@@ -58,7 +58,7 @@ def is_reference_chunk(text: str) -> bool:
         text (str): Chunk text.
 
     Returns:
-        bool: ``True`` when the chunk appears to be bibliography/reference content.
+        bool: True when the chunk appears to be bibliography/reference content.
     """
 
     res = False
@@ -90,7 +90,7 @@ def is_metadata_chunk(text: str) -> bool:
         text (str): Chunk text.
 
     Returns:
-        bool: ``True`` when the chunk appears to be non-content metadata.
+        bool: True when the chunk appears to be non-content metadata.
     """
 
     res = False

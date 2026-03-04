@@ -62,7 +62,7 @@ def list_sessions() -> list[tuple[str, str]]:
         None.
 
     Returns:
-        list[tuple[str, str]]: List of ``(session_id, title)`` tuples.
+        list[tuple[str, str]]: List of (session_id, title) tuples.
     """
 
     res = list()
@@ -121,7 +121,7 @@ def delete_session(session_id: str):
 
 
 def touch_session(session_id: str):
-    """Update a session's ``updated_at`` timestamp.
+    """Update a session's updated_at timestamp.
 
     Args:
         session_id (str): Session UUID to update.
@@ -144,7 +144,7 @@ def load_chat(session_id: str) -> list[dict[str, str]]:
         session_id (str): Session UUID.
 
     Returns:
-        list[dict[str, str]]: Message list in ``{\"role\", \"content\"}`` format.
+        list[dict[str, str]]: Message list in {\"role\", \"content\"} format.
     """
 
     conn = db_conn()
@@ -192,7 +192,7 @@ def add_message(session_id: str, role: str, content: str):
 
     Args:
         session_id (str): Session UUID.
-        role (str): Message role such as ``user`` or ``assistant``.
+        role (str): Message role such as user or assistant.
         content (str): Message body.
 
     Returns:
@@ -217,7 +217,7 @@ def refresh_session_choices() -> list[tuple[str, str]]:
         None.
 
     Returns:
-        list[tuple[str, str]]: List of ``(title, session_id)`` tuples.
+        list[tuple[str, str]]: List of (title, session_id) tuples.
     """
 
     sessions = list_sessions()

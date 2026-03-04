@@ -78,10 +78,61 @@ def add_pdf_to_db(db: Chroma, pdf_path: str) -> int:
 
     document_ids = [str(uuid.uuid4()) for _ in range(len(chunked_docs))]
     db.add_documents(chunked_docs, ids=document_ids)
+    print("Vector store has been updated!")
 
     res = len(chunked_docs)
 
     return res
+
+
+def _rewrite_query_to_english(question: str) -> str:
+    """Rewrite a query into English keywords for multilingual retrieval.
+
+    Args:
+        question (str): Original user query.
+
+    Returns:
+        str: Rewritten English query. Returns the original question on failure.
+    """
+
+    try:
+        rewritten = QUERY_REWRITE_CHAIN.invoke({"question": question}).strip()
+        if rewritten and len(rewritten) <= 200:
+            return rewritten
+    except Exception as e:
+        print(f"[query_rewrite] failed: {repr(e)}")
+    return question
+
+
+def _looks_insufficient_answer(answer: str) -> bool:
+    """Detect whether an answer indicates insufficient context/evidence.
+
+    This avoids relying on an exact sentinel string, which can break when
+    the system prompt is changed.
+
+    Args:
+        answer (str): Model-generated answer text.
+
+    Returns:
+        bool: True if the answer appears to report missing evidence/context.
+    """
+
+    text = (answer or "").strip().lower()
+    if not text:
+        return True
+
+    insufficient_markers = [
+        "insufficient documents",
+        "insufficient context",
+        "provided context does not",
+        "not included in the provided context",
+        "cannot be determined from the provided context",
+        "포함되어 있지 않",
+        "찾지 못",
+        "충분한 문서",
+    ]
+
+    return any(marker in text for marker in insufficient_markers)
 
 
 def answer_from_db(
@@ -103,11 +154,21 @@ def answer_from_db(
     clean_question, inline_filter = parse_filter_from_question(raw_question)
     chroma_filter = merge_filters(inline_filter, session_filter)
     docs_scores = retrieve_with_scores(db, clean_question, top_k=TOP_K, chroma_filter=chroma_filter)
+    best_score = max((score for _, score in docs_scores), default=0.0)
+
+    if looks_korean(clean_question):
+        english_query = _rewrite_query_to_english(clean_question)
+        if not docs_scores or best_score < MIN_RELEVANCE:
+            english_docs_scores = retrieve_with_scores(db, english_query, top_k=TOP_K, chroma_filter=chroma_filter)
+            english_best_score = max((score for _, score in english_docs_scores), default=0.0)
+            if english_docs_scores and (english_best_score >= best_score):
+                docs_scores = english_docs_scores
+                best_score = english_best_score
 
     if not docs_scores:
         res = (INSUFFICIENT_MSG, list(), chroma_filter)
         return res
-    best_score = max(score for _, score in docs_scores)
+
     if best_score < MIN_RELEVANCE:
         res = (INSUFFICIENT_MSG, docs_scores, chroma_filter)
         return res
@@ -115,7 +176,7 @@ def answer_from_db(
     context = format_context(docs_scores)
     answer = chain.invoke({"context": context, "question": clean_question}).strip()
 
-    if answer == INSUFFICIENT_MSG:
+    if _looks_insufficient_answer(answer):
         res = (INSUFFICIENT_MSG, docs_scores, chroma_filter)
         return res
 
@@ -132,7 +193,7 @@ def check_doc_exist(pdf_path: str, db: Chroma) -> bool:
         db (Chroma): Target vector database.
 
     Returns:
-        bool: ``True`` when matching chunks already exist.
+        bool: True when matching chunks already exist.
     """
 
     res = False
@@ -159,7 +220,7 @@ def merge_filters(
         session_filter (Optional[dict[str, Any]]): Filter from session UI state.
 
     Returns:
-        Optional[dict[str, Any]]: Merged filter. Returns ``None`` if both are empty.
+        Optional[dict[str, Any]]: Merged filter. Returns None if both are empty.
     """
 
     if inline_filter and session_filter:
@@ -172,8 +233,8 @@ def add_pubmed_abstracts_to_db(db: Chroma, papers: list[Any]) -> int:
 
     Args:
         db (Chroma): Target vector database.
-        papers (list[Any]): PubMed-like paper objects with ``pmid``, ``title``,
-            ``abstract``, ``journal``, and ``pub_date`` attributes.
+        papers (list[Any]): PubMed-like paper objects with pmid, title,
+            abstract, journal, and pub_date attributes.
 
     Returns:
         int: Number of newly added abstract documents.
@@ -225,47 +286,51 @@ def auto_fetch_and_ingest(db: Chroma, question: str) -> Optional[str]:
         question (str): User question used as search query seed.
 
     Returns:
-        Optional[str]: Downloaded file path or ``pubmed:{n}`` marker when success;
-        empty string when all retrieval paths fail.
+        Optional[str]: Result marker string.
+        - pdf_added:{path}: PDF downloaded and newly indexed.
+        - pdf_existing:{path}: PDF is available but already indexed.
+        - pubmed:{n}: Number of newly indexed PubMed abstracts.
+        - \"\": All retrieval paths failed.
     """
 
     res = ""
 
-    search_query = question
-    try:
-        if looks_korean(question):
-            search_query = QUERY_REWRITE_CHAIN.invoke({"question": question}).strip()
-            print(f"search quer: {search_query}")
-            if not search_query or len(search_query) > 200:
-                search_query = question
-    except Exception as e:
-        print(f"[query_rewrite] failed: {repr(e)}")
-        search_query = question
+    search_queries = [question]
+    if looks_korean(question):
+        rewritten_query = _rewrite_query_to_english(question)
+        if rewritten_query != question:
+            search_queries.append(rewritten_query)
 
-    # 1) PMC(PubMed Central, OA PDF)
-    pmc_download_failures = 0
-    try:
-        pmc_papers = pmc_search(search_query, max_results=PMC_MAX_RESULTS)
-        for paper in pmc_papers:
-            try:
-                path = download_pdf_checked(
-                    paper.pdf_url,
-                    out_dir=AUTO_PAPERS_DIR,
-                    filename_hint=f"{paper.pmcid}.pdf",
-                )
-                if not check_doc_exist(path, db):
-                    add_pdf_to_db(db, path)
-                res = path
-                break
-            except Exception as e:
-                print(f"[PMC] {paper.pmcid} Failed to download PDF: {repr(e)}")
-                pmc_download_failures += 1
-                continue
+    for search_query in search_queries:
+        print(f"search query: {search_query}")
 
-    except Exception as e:
-        print(f"[auto_fetch_and_ingest] PMC failed: {repr(e)}")
+        # 1) PMC(PubMed Central, OA PDF)
+        pmc_download_failures = 0
+        try:
+            pmc_papers = pmc_search(search_query, max_results=PMC_MAX_RESULTS)
+            for paper in pmc_papers:
+                try:
+                    path = download_pdf_checked(
+                        paper.pdf_url,
+                        out_dir=AUTO_PAPERS_DIR,
+                        filename_hint=f"{paper.pmcid}.pdf",
+                    )
+                    if not check_doc_exist(path, db):
+                        add_pdf_to_db(db, path)
+                        res = f"pdf_added:{path}"
+                    else:
+                        res = f"pdf_existing:{path}"
+                    break
+                except Exception as e:
+                    print(f"[PMC] {paper.pmcid} Failed to download PDF: {repr(e)}")
+                    pmc_download_failures += 1
+                    continue
+        except Exception as e:
+            print(f"[auto_fetch_and_ingest] PMC failed: {repr(e)}")
 
-    if not res:
+        if res:
+            break
+
         print(
             f"[auto_fetch_and_ingest] PMC OA ingest failed "
             f"(download_failures={pmc_download_failures}). Try PubMed abstract fallback."
@@ -279,8 +344,10 @@ def auto_fetch_and_ingest(db: Chroma, question: str) -> Optional[str]:
         except Exception as e:
             print(f"[auto_fetch_and_ingest] PubMed abstract fallback failed: {repr(e)}")
 
-    # 3) arXiv
-    if not res:
+        if res:
+            break
+
+        # 3) arXiv
         print(
             "[auto_fetch_and_ingest] Try out arXiv fallback since the model could not find enough evidence in PMC/PubMed."
         )
@@ -295,13 +362,17 @@ def auto_fetch_and_ingest(db: Chroma, question: str) -> Optional[str]:
                     )
                     if not check_doc_exist(path, db):
                         add_pdf_to_db(db, path)
-                    res = path
+                        res = f"pdf_added:{path}"
+                    else:
+                        res = f"pdf_existing:{path}"
                     break
                 except Exception as e:
                     print(f"[Arvix] {paper.arxiv_id} Failed to download PDF: {repr(e)}")
                     continue
-
         except Exception as e:
             print(f"[auto_fetch_and_ingest] arXiv failed: {repr(e)}")
+
+        if res:
+            break
 
     return res

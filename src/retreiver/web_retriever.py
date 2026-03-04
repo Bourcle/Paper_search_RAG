@@ -199,7 +199,7 @@ def _get_oa_pdf_url(pmc_id: str) -> str:
     """Resolve an open-access PDF URL from a PMC identifier.
 
     Args:
-        pmc_id (str): PMC ID such as ``PMC1234567``.
+        pmc_id (str): PMC ID such as PMC1234567.
 
     Returns:
         str: HTTPS PDF URL if found; otherwise an empty string.
