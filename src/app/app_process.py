@@ -4,6 +4,15 @@ from app.ui_utils import ui_delete_chat, ui_select_chat, ui_send, ui_new_chat, u
 
 
 def build_app():
+    """Build and wire the Gradio application.
+
+    Args:
+        None.
+
+    Returns:
+        gr.Blocks: Configured Gradio app instance.
+    """
+
     with gr.Blocks(title="PDF RAG Chat (with History)") as demo:
         gr.Markdown(
             "## PDF RAG Chatbot (Chroma) — Based on uploaded PDF + automatically retrieved documents when it needs more evidence"
@@ -59,6 +68,16 @@ def build_app():
 
         # New chat
         def _new_chat():
+            """Create a fresh chat session and reset UI state.
+
+            Args:
+                None.
+
+            Returns:
+                tuple[str, gr.Dropdown, list, str]: New session id, updated dropdown,
+                empty chat history, and status message.
+            """
+
             sid, choices, empty_chat, _, msg = ui_new_chat()
             return sid, gr.Dropdown(choices=choices, value=sid), empty_chat, msg
 
@@ -70,6 +89,16 @@ def build_app():
 
         # Delete chat
         def _delete_chat(sid: str):
+            """Delete selected session and create a replacement session.
+
+            Args:
+                sid (str): Session UUID to delete.
+
+            Returns:
+                tuple[str, gr.Dropdown, list, str]: New session id, updated dropdown,
+                empty chat history, and status message.
+            """
+
             new_id, choices, empty_chat, msg = ui_delete_chat(sid)
             return new_id, gr.Dropdown(choices=choices, value=new_id), empty_chat, msg
 
@@ -81,6 +110,15 @@ def build_app():
 
         # Select chat
         def _select_chat(dd_value: str):
+            """Load selected session history into chat UI.
+
+            Args:
+                dd_value (str): Selected session UUID from dropdown.
+
+            Returns:
+                tuple[str, list, str]: Active session id, chat messages, and status.
+            """
+
             # dd_value is session_id
             if not dd_value:
                 return "", [], "Please select a session."
@@ -95,6 +133,16 @@ def build_app():
 
         # Upload PDFs
         def _upload(sid: str, files):
+            """Handle uploaded PDF files and update upload status text.
+
+            Args:
+                sid (str): Active session UUID.
+                files (Any): Uploaded Gradio file objects.
+
+            Returns:
+                str: Upload result message.
+            """
+
             # gr.File passes list of TemporaryFile objects with .name
             msg = ui_upload_pdfs(sid, files or [])
             return msg
@@ -121,12 +169,31 @@ def build_app():
 
         # Clear UI only (does not delete stored history)
         def _clear_ui():
+            """Clear chat widgets without deleting persisted history.
+
+            Args:
+                None.
+
+            Returns:
+                tuple[list, str]: Empty chat list and cleared input text.
+            """
+
             return [], ""
 
         btn_clear.click(_clear_ui, inputs=[], outputs=[chatbot, user_text])
 
         # Initial auto-create a session if none
         def _init():
+            """Initialize default session state when the app loads.
+
+            Args:
+                None.
+
+            Returns:
+                tuple[str, gr.Dropdown, list, str]: Session id, dropdown state,
+                initial chat history, and status.
+            """
+
             sid = create_session("New Chat")
             return sid, gr.Dropdown(choices=refresh_session_choices(), value=sid), [], "Ready"
 

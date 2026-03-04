@@ -9,6 +9,15 @@ import gradio as gr
 
 
 def print_help():
+    """Print CLI help text for supported commands.
+
+    Args:
+        None.
+
+    Returns:
+        None: This function does not return a value.
+    """
+
     print("\nHelp:")
     print("  /add <pdf_path>        : Add PDF on Vector DB")
     print("  /where <json_filter>   : Apply meta data filter on next question (Chroma filter grammar)")
@@ -21,21 +30,46 @@ def print_help():
 
 
 def refresh_session_choices() -> list[tuple[str, str]]:
-    """Gradio choices: list of (label, value) or (value, label) depending on component.
-    We'll use Dropdown with choices as list of tuples (label, value).
+    """Build Gradio dropdown choices from stored sessions.
+
+    Args:
+        None.
+
+    Returns:
+        list[tuple[str, str]]: List of ``(title, session_id)`` tuples.
     """
+
     sessions = list_sessions()
     # label show title, value is id
     return [(title, sid) for sid, title in sessions]
 
 
 def ui_new_chat() -> tuple[str, list[tuple[str, str]], list[tuple[str, str]], str, str]:
+    """Create a new chat session and return initial UI state.
+
+    Args:
+        None.
+
+    Returns:
+        tuple[str, list[tuple[str, str]], list[tuple[str, str]], str, str]:
+        Session id, updated choices, empty chat list, empty input text, and status.
+    """
+
     sid = create_session("New Chat")
     choices = refresh_session_choices()
     return sid, choices, [], "", "New Chat just started"
 
 
 def ui_select_chat(session_id: str) -> tuple[list[dict[str, str]], str]:
+    """Load chat history for a selected session.
+
+    Args:
+        session_id (str): Selected session UUID.
+
+    Returns:
+        tuple[list[dict[str, str]], str]: Loaded chat messages and status message.
+    """
+
     if not session_id:
         return [], "Please choose session"
     chat = load_chat(session_id)
@@ -43,6 +77,16 @@ def ui_select_chat(session_id: str) -> tuple[list[dict[str, str]], str]:
 
 
 def ui_delete_chat(session_id: str) -> tuple[str, list[tuple[str, str]], list[tuple[str, str]], str]:
+    """Delete a session and create a fresh replacement session.
+
+    Args:
+        session_id (str): Session UUID to delete.
+
+    Returns:
+        tuple[str, list[tuple[str, str]], list[tuple[str, str]], str]:
+        New session id, updated choices, empty chat list, and status message.
+    """
+
     if not session_id:
         return "", refresh_session_choices(), [], "There is no session to delete"
     delete_session(session_id)
@@ -52,6 +96,16 @@ def ui_delete_chat(session_id: str) -> tuple[str, list[tuple[str, str]], list[tu
 
 
 def ui_upload_pdfs(session_id: str, files: list[gr.File]) -> str:
+    """Validate and ingest uploaded PDF files into the vector database.
+
+    Args:
+        session_id (str): Active session UUID.
+        files (list[gr.File]): Uploaded Gradio file objects.
+
+    Returns:
+        str: Multi-line status message for processed files.
+    """
+
     if not files:
         return "We don't have any uploaded file"
     if not session_id:
@@ -75,6 +129,19 @@ def ui_upload_pdfs(session_id: str, files: list[gr.File]) -> str:
 
 
 def stream_text(text: str, delay: float = 0.001):
+    """Yield text progressively for streaming UI updates.
+
+    Args:
+        text (str): Target text to stream.
+        delay (float): Sleep duration between yielded chunks.
+
+    Returns:
+        Iterator[str]: Generator that emits incrementally built text.
+
+    Yields:
+        str: Incrementally growing text buffer.
+    """
+
     buffer = list()
     for ch in text:
         buffer.append(ch)
@@ -88,9 +155,19 @@ def ui_send(
     user_text: str,
     session_filter_json: str,
 ):
+    """Handle a user message and stream assistant responses to the UI.
+
+    Args:
+        session_id (str): Active session UUID.
+        chat (list[tuple[str, str]]): Current chat state.
+        user_text (str): Raw user message.
+        session_filter_json (str): Optional JSON filter string.
+
+    Yields:
+        tuple[str, list[dict[str, str]], str, str]: Updated session id, chat state,
+        status text, and textbox value.
     """
-    Returns: (session_id, updated_chat, status)
-    """
+
     user_text = (user_text or "").strip()
     if not user_text:
         yield session_id, chat, "Please ask a question."
