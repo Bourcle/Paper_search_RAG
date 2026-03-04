@@ -6,6 +6,60 @@ from langchain_core.documents import Document
 from config import TOP_K
 
 
+def retrieve_with_sparse(question: str, sparse_raw: dict) -> tuple[dict, float]:
+    """Retrieve documents using a simple sparse (token-overlap) scoring method.
+
+    Args:
+        question (str): The input query string.
+        sparse_raw (dict): Dictionary containing raw document data retrieved from a vector database (e.g., Chroma).
+
+    Returns:
+        tuple[dict, float]: A tuple containing:
+            - sparse_res (list[tuple[Document, float]]):
+              Top-k documents with their sparse relevance scores.
+            - max_sparse_score (float):
+              The maximum sparse score among the retrieved documents.
+              This is typically used for score normalization during
+              hybrid (dense + sparse) retrieval.
+    """
+
+    res = tuple()
+    sparse_res = list()
+    max_sparse_score = 0.0
+
+    query_tokens = re.findall(r"[0-9a-zA-Z가-힣]+", (question or "").lower())
+    query_counter = Counter(query_tokens)  # 빈도수 기반 sparse vector
+
+    raw_documents = sparse_raw.get("documents", list())
+    raw_metadatas = sparse_raw.get("metadatas", list())
+
+    for idx, doc_text in enumerate(raw_documents):
+        if not doc_text:
+            continue
+        doc_tokens = re.findall(r"[0-9a-zA-Z가-힣]+", (doc_text or "").lower())
+        if not doc_tokens:
+            continue
+        doc_counter = Counter(doc_tokens)
+        # find query counter in doc counter
+        overlap = sum(min(doc_counter[token], count) for token, count in query_counter.items() if token in doc_counter)
+        if overlap <= 0:
+            continue
+        sparse_score = overlap / (len(doc_tokens) + 1) ** 0.5
+        if idx < len(raw_documents):
+            metadata = raw_metadatas[idx]
+        else:
+            metadata = dict()
+        sparse_res.append((Document(page_content=doc_text, metadata=metadata), sparse_score))
+
+    if sparse_res:
+        sparse_res = sorted(sparse_res, key=lambda item: item[1], reverse=True)[:TOP_K]
+        max_sparse_score = max((score for _, score in sparse_res))
+
+    res = (sparse_res, max_sparse_score)
+
+    return res
+
+
 def retrieve_with_scores(
     db: Chroma, question: str, top_k: int = TOP_K, chroma_filter: Optional[dict[str, Any]] = None
 ) -> list[tuple[Document, float]]:
@@ -32,27 +86,7 @@ def retrieve_with_scores(
         dense_res = db.similarity_search_with_relevance_scores(question, k=top_k)
         sparse_raw = db.get(include=["documents", "metadatas"])
 
-    query_tokens = re.findall(r"[0-9a-zA-Z가-힣]+", (question or "").lower())
-    query_counter = Counter(query_tokens)
-    raw_documents = sparse_raw.get("documents") or []
-    raw_metadatas = sparse_raw.get("metadatas") or []
-
-    for idx, doc_text in enumerate(raw_documents):
-        if not doc_text:
-            continue
-        doc_tokens = re.findall(r"[0-9a-zA-Z가-힣]+", doc_text.lower())
-        if not doc_tokens:
-            continue
-        doc_counter = Counter(doc_tokens)
-        overlap = sum(min(doc_counter[token], count) for token, count in query_counter.items() if token in doc_counter)
-        if overlap <= 0:
-            continue
-        sparse_score = overlap / ((len(doc_tokens) + 1) ** 0.5)
-        metadata = raw_metadatas[idx] if idx < len(raw_metadatas) else dict()
-        sparse_res.append((Document(page_content=doc_text, metadata=metadata or dict()), sparse_score))
-
-    sparse_res = sorted(sparse_res, key=lambda item: item[1], reverse=True)[:top_k]
-    max_sparse_score = max((score for _, score in sparse_res), default=0.0)
+    sparse_res, max_sparse_score = retrieve_with_sparse(question, sparse_raw)
 
     merged: dict[tuple[str, str, str, str], dict[str, Any]] = dict()
 
