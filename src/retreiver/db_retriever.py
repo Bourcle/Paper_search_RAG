@@ -25,12 +25,11 @@ def retrieve_with_scores(
     sparse_res = list()
     res = list()
 
-    dense_k = max(top_k * 2, top_k)
     if chroma_filter:
-        dense_res = db.similarity_search_with_relevance_scores(question, k=dense_k, filter=chroma_filter)
+        dense_res = db.similarity_search_with_relevance_scores(question, k=top_k, filter=chroma_filter)
         sparse_raw = db.get(where=chroma_filter, include=["documents", "metadatas"])
     else:
-        dense_res = db.similarity_search_with_relevance_scores(question, k=dense_k)
+        dense_res = db.similarity_search_with_relevance_scores(question, k=top_k)
         sparse_raw = db.get(include=["documents", "metadatas"])
 
     query_tokens = re.findall(r"[0-9a-zA-Z가-힣]+", (question or "").lower())
@@ -52,7 +51,7 @@ def retrieve_with_scores(
         metadata = raw_metadatas[idx] if idx < len(raw_metadatas) else dict()
         sparse_res.append((Document(page_content=doc_text, metadata=metadata or dict()), sparse_score))
 
-    sparse_res = sorted(sparse_res, key=lambda item: item[1], reverse=True)[:dense_k]
+    sparse_res = sorted(sparse_res, key=lambda item: item[1], reverse=True)[:top_k]
     max_sparse_score = max((score for _, score in sparse_res), default=0.0)
 
     merged: dict[tuple[str, str, str, str], dict[str, Any]] = dict()
