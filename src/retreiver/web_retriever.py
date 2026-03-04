@@ -14,6 +14,16 @@ class ArxivPaper:
 
 
 def arxiv_search(query: str, max_results: int = ARXIV_MAX_RESULTS) -> list[ArxivPaper]:
+    """Search arXiv and return paper metadata including PDF URLs.
+
+    Args:
+        query (str): Search query string.
+        max_results (int): Maximum number of items to retrieve.
+
+    Returns:
+        list[ArxivPaper]: Parsed arXiv paper list.
+    """
+
     res = list()
 
     base = "http://export.arxiv.org/api/query"
@@ -60,6 +70,16 @@ class PmcPaper:
 
 
 def pmc_search(query: str, max_results: int = PMC_MAX_RESULTS) -> list[PmcPaper]:
+    """Search open-access PMC papers and collect downloadable PDF URLs.
+
+    Args:
+        query (str): Search query string.
+        max_results (int): Maximum number of items to retrieve.
+
+    Returns:
+        list[PmcPaper]: PMC paper list with resolved PDF links.
+    """
+
     res = list()
 
     url_query = urllib.parse.quote(query)
@@ -119,6 +139,16 @@ class PubmedPaper:
 
 
 def pubmed_search_abstracts(query: str, max_results: int = PUBMED_MAX_RESULTS) -> list[PubmedPaper]:
+    """Search PubMed and fetch article abstracts.
+
+    Args:
+        query (str): Search query string.
+        max_results (int): Maximum number of items to retrieve.
+
+    Returns:
+        list[PubmedPaper]: Papers with title, abstract, and publication metadata.
+    """
+
     res = list()
 
     url_query = urllib.parse.quote(query)
@@ -166,6 +196,15 @@ def pubmed_search_abstracts(query: str, max_results: int = PUBMED_MAX_RESULTS) -
 
 
 def _get_oa_pdf_url(pmc_id: str) -> str:
+    """Resolve an open-access PDF URL from a PMC identifier.
+
+    Args:
+        pmc_id (str): PMC ID such as ``PMC1234567``.
+
+    Returns:
+        str: HTTPS PDF URL if found; otherwise an empty string.
+    """
+
     oa_api = f"https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi?id={pmc_id}"
     try:
         with urllib.request.urlopen(oa_api, timeout=10) as resp:

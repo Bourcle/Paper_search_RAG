@@ -9,6 +9,18 @@ from config import CHUNCK_SIZE, CHUNK_OVERLAP
 
 
 def ensure_pdf(path_to_pdf: str) -> bool:
+    """Validate that the given path exists and points to a PDF file.
+
+    Args:
+        path_to_pdf (str): Path to a local file.
+
+    Raises:
+        FileNotFoundError: Raised when the file does not exist.
+        ValueError: Raised when the file extension is not ``.pdf``.
+
+    Returns:
+        bool: ``True`` when the file is a valid PDF path.
+    """
 
     res = True
     if not os.path.exists(path_to_pdf):
@@ -22,6 +34,15 @@ def ensure_pdf(path_to_pdf: str) -> bool:
 
 
 def load_pdf_docs(pdf_path: str) -> list[Document]:
+    """Load PDF pages into LangChain documents.
+
+    Args:
+        pdf_path (str): Path to the PDF file.
+
+    Returns:
+        list[Document]: Loaded page-level documents.
+    """
+
     res = list()
 
     loader = PyPDFLoader(pdf_path)
@@ -31,6 +52,14 @@ def load_pdf_docs(pdf_path: str) -> list[Document]:
 
 
 def is_reference_chunk(text: str) -> bool:
+    """Heuristically detect whether a text chunk is from a references section.
+
+    Args:
+        text (str): Chunk text.
+
+    Returns:
+        bool: ``True`` when the chunk appears to be bibliography/reference content.
+    """
 
     res = False
     section_headers = {"REFERENCES", "REFERENCE", "BIBLIOGRAPHY", "ACKNOWLEDGMENTS", "ACKNOWLEDGEMENTS", "참고문헌"}
@@ -55,6 +84,14 @@ def is_reference_chunk(text: str) -> bool:
 
 
 def is_metadata_chunk(text: str) -> bool:
+    """Detect chunks that look like author affiliation or metadata blocks.
+
+    Args:
+        text (str): Chunk text.
+
+    Returns:
+        bool: ``True`` when the chunk appears to be non-content metadata.
+    """
 
     res = False
 
@@ -71,6 +108,15 @@ def is_metadata_chunk(text: str) -> bool:
 
 
 def split_docs(documents: list[Document]) -> list[Document]:
+    """Split loaded PDF documents and filter out noisy chunks.
+
+    Args:
+        documents (list[Document]): Raw documents loaded from a PDF.
+
+    Returns:
+        list[Document]: Filtered content chunks suitable for vector indexing.
+    """
+
     res = list()
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNCK_SIZE, chunk_overlap=CHUNK_OVERLAP, separators=["\n\n", "\n"]
@@ -87,9 +133,21 @@ def split_docs(documents: list[Document]) -> list[Document]:
 
 
 def download_pdf_checked(url: str, out_dir: str, filename_hint: str) -> str:
+    """Download a PDF file with content-type and size validation.
+
+    Args:
+        url (str): Source URL of the PDF.
+        out_dir (str): Directory where the file should be saved.
+        filename_hint (str): Suggested output filename.
+
+    Raises:
+        RuntimeError: Raised when the response is not a PDF-like payload.
+        RuntimeError: Raised when the downloaded file size is too small.
+
+    Returns:
+        str: Absolute or relative path to the downloaded PDF.
     """
-    Safer downloader: checks content-type + size; handles 403/html.
-    """
+
     os.makedirs(out_dir, exist_ok=True)
 
     res = ""

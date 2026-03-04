@@ -5,6 +5,15 @@ from config import CHAT_DB_PATH
 
 
 def init_chat_db(db_path: str = CHAT_DB_PATH):
+    """Initialize SQLite tables for chat sessions and messages.
+
+    Args:
+        db_path (str): SQLite database path.
+
+    Returns:
+        None: This function does not return a value.
+    """
+
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
     cur.execute(
@@ -34,10 +43,28 @@ def init_chat_db(db_path: str = CHAT_DB_PATH):
 
 
 def db_conn():
+    """Create a new SQLite connection to the chat database.
+
+    Args:
+        None.
+
+    Returns:
+        sqlite3.Connection: Open database connection.
+    """
+
     return sqlite3.connect(CHAT_DB_PATH)
 
 
 def list_sessions() -> list[tuple[str, str]]:
+    """List sessions ordered by most recent update time.
+
+    Args:
+        None.
+
+    Returns:
+        list[tuple[str, str]]: List of ``(session_id, title)`` tuples.
+    """
+
     res = list()
 
     conn = db_conn()
@@ -52,6 +79,15 @@ def list_sessions() -> list[tuple[str, str]]:
 
 
 def create_session(title: str = "New Chat") -> str:
+    """Create a new chat session row.
+
+    Args:
+        title (str): Initial session title.
+
+    Returns:
+        str: Newly created session UUID.
+    """
+
     sid = str(uuid.uuid4())
     now = time.time()
     conn = db_conn()
@@ -67,6 +103,15 @@ def create_session(title: str = "New Chat") -> str:
 
 
 def delete_session(session_id: str):
+    """Delete a session and its messages.
+
+    Args:
+        session_id (str): Session UUID to delete.
+
+    Returns:
+        None: This function does not return a value.
+    """
+
     conn = db_conn()
     cur = conn.cursor()
     cur.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
@@ -76,6 +121,15 @@ def delete_session(session_id: str):
 
 
 def touch_session(session_id: str):
+    """Update a session's ``updated_at`` timestamp.
+
+    Args:
+        session_id (str): Session UUID to update.
+
+    Returns:
+        None: This function does not return a value.
+    """
+
     conn = db_conn()
     cur = conn.cursor()
     cur.execute("UPDATE sessions SET updated_at = ? WHERE id = ?", (time.time(), session_id))
@@ -84,6 +138,15 @@ def touch_session(session_id: str):
 
 
 def load_chat(session_id: str) -> list[dict[str, str]]:
+    """Load all messages in a session sorted by timestamp.
+
+    Args:
+        session_id (str): Session UUID.
+
+    Returns:
+        list[dict[str, str]]: Message list in ``{\"role\", \"content\"}`` format.
+    """
+
     conn = db_conn()
     cur = conn.cursor()
     cur.execute("SELECT role, content FROM messages WHERE session_id = ? ORDER BY ts ASC", (session_id,))
@@ -96,6 +159,16 @@ def load_chat(session_id: str) -> list[dict[str, str]]:
 
 
 def maybe_set_title(session_id: str, first_user_message: str):
+    """Set a session title from the first user message when still default.
+
+    Args:
+        session_id (str): Session UUID.
+        first_user_message (str): Candidate title source text.
+
+    Returns:
+        None: This function does not return a value.
+    """
+
     # set title only if default
     conn = db_conn()
     cur = conn.cursor()
@@ -115,6 +188,17 @@ def maybe_set_title(session_id: str, first_user_message: str):
 
 
 def add_message(session_id: str, role: str, content: str):
+    """Insert a chat message and refresh session activity time.
+
+    Args:
+        session_id (str): Session UUID.
+        role (str): Message role such as ``user`` or ``assistant``.
+        content (str): Message body.
+
+    Returns:
+        None: This function does not return a value.
+    """
+
     conn = db_conn()
     cur = conn.cursor()
     cur.execute(
@@ -127,9 +211,15 @@ def add_message(session_id: str, role: str, content: str):
 
 
 def refresh_session_choices() -> list[tuple[str, str]]:
-    """Gradio choices: list of (label, value) or (value, label) depending on component.
-    We'll use Dropdown with choices as list of tuples (label, value).
+    """Build Gradio dropdown choices from stored sessions.
+
+    Args:
+        None.
+
+    Returns:
+        list[tuple[str, str]]: List of ``(title, session_id)`` tuples.
     """
+
     sessions = list_sessions()
     # label show title, value is id
     return [(title, sid) for sid, title in sessions]

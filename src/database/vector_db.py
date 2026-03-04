@@ -26,6 +26,17 @@ from utils.utils import parse_filter_from_question, looks_korean
 def open_vector_db(
     emb_model: str = DEFAULT_EMB_MODEL, persist_dir: str = DEFAUL_DB_DIR, collection: str = DEFAULT_COLLECTION
 ) -> Chroma:
+    """Initialize and return a Chroma vector database instance.
+
+    Args:
+        emb_model (str): Embedding model name.
+        persist_dir (str): Chroma persistence directory.
+        collection (str): Collection name.
+
+    Returns:
+        Chroma: Opened Chroma client.
+    """
+
     embeddings = HuggingFaceEmbeddings(model_name=emb_model)
     res = Chroma(collection_name=collection, persist_directory=persist_dir, embedding_function=embeddings)
 
@@ -36,6 +47,19 @@ VECTOR_DB = open_vector_db()
 
 
 def add_pdf_to_db(db: Chroma, pdf_path: str) -> int:
+    """Ingest a PDF file into the vector database as chunked documents.
+
+    Args:
+        db (Chroma): Target vector database.
+        pdf_path (str): Path to a PDF file.
+
+    Raises:
+        ValueError: Raised when no valid text chunks are extracted.
+
+    Returns:
+        int: Number of chunks added.
+    """
+
     res = 0
 
     raw_docs = load_pdf_docs(pdf_path)
@@ -63,6 +87,19 @@ def add_pdf_to_db(db: Chroma, pdf_path: str) -> int:
 def answer_from_db(
     db: Chroma, chain: Callable, raw_question: str, session_filter: Optional[dict[str, Any]] = None
 ) -> tuple[str, list[tuple[Document, float]], Optional[dict[str, Any]]]:
+    """Generate an answer from retrieved evidence in the vector database.
+
+    Args:
+        db (Chroma): Target vector database.
+        chain (Callable): QA chain used to produce final answers.
+        raw_question (str): Raw user question, optionally with inline filters.
+        session_filter (Optional[dict[str, Any]]): Session-level metadata filter.
+
+    Returns:
+        tuple[str, list[tuple[Document, float]], Optional[dict[str, Any]]]:
+        Answer text, retrieved docs with scores, and the merged filter.
+    """
+
     clean_question, inline_filter = parse_filter_from_question(raw_question)
     chroma_filter = merge_filters(inline_filter, session_filter)
     docs_scores = retrieve_with_scores(db, clean_question, top_k=TOP_K, chroma_filter=chroma_filter)
@@ -88,6 +125,16 @@ def answer_from_db(
 
 
 def check_doc_exist(pdf_path: str, db: Chroma) -> bool:
+    """Check whether a PDF (by stem filename) already exists in Chroma metadata.
+
+    Args:
+        pdf_path (str): Local PDF path.
+        db (Chroma): Target vector database.
+
+    Returns:
+        bool: ``True`` when matching chunks already exist.
+    """
+
     res = False
 
     if not pdf_path:
@@ -105,12 +152,33 @@ def check_doc_exist(pdf_path: str, db: Chroma) -> bool:
 def merge_filters(
     inline_filter: Optional[dict[str, Any]], session_filter: Optional[dict[str, Any]]
 ) -> Optional[dict[str, Any]]:
+    """Merge inline filter and session filter into a single Chroma filter.
+
+    Args:
+        inline_filter (Optional[dict[str, Any]]): Filter parsed from the query.
+        session_filter (Optional[dict[str, Any]]): Filter from session UI state.
+
+    Returns:
+        Optional[dict[str, Any]]: Merged filter. Returns ``None`` if both are empty.
+    """
+
     if inline_filter and session_filter:
         return {"$and": [session_filter, inline_filter]}
     return session_filter or inline_filter
 
 
 def add_pubmed_abstracts_to_db(db: Chroma, papers: list[Any]) -> int:
+    """Add PubMed abstract documents to the vector database.
+
+    Args:
+        db (Chroma): Target vector database.
+        papers (list[Any]): PubMed-like paper objects with ``pmid``, ``title``,
+            ``abstract``, ``journal``, and ``pub_date`` attributes.
+
+    Returns:
+        int: Number of newly added abstract documents.
+    """
+
     docs = list()
     ids = list()
 
@@ -148,6 +216,19 @@ def add_pubmed_abstracts_to_db(db: Chroma, papers: list[Any]) -> int:
 
 
 def auto_fetch_and_ingest(db: Chroma, question: str) -> Optional[str]:
+    """Automatically retrieve external papers and ingest evidence into Chroma.
+
+    Retrieval strategy is PMC PDF -> PubMed abstract -> arXiv PDF fallback.
+
+    Args:
+        db (Chroma): Target vector database.
+        question (str): User question used as search query seed.
+
+    Returns:
+        Optional[str]: Downloaded file path or ``pubmed:{n}`` marker when success;
+        empty string when all retrieval paths fail.
+    """
+
     res = ""
 
     search_query = question

@@ -45,6 +45,15 @@ PUBMED_MAX_RESULTS = 20
 
 
 def build_qa_chain(llm_model: str = DEFAULT_LLM_MODEL) -> Callable:
+    """Build the QA generation chain used for context-grounded answering.
+
+    Args:
+        llm_model (str): OpenAI chat model name.
+
+    Returns:
+        Callable: Runnable chain that maps ``{context, question}`` to answer text.
+    """
+
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", SYSTEM_PROMPT),
@@ -60,6 +69,15 @@ def build_qa_chain(llm_model: str = DEFAULT_LLM_MODEL) -> Callable:
 
 
 def build_query_rewrite_chain(llm_model: str = DEFAULT_LLM_MODEL):
+    """Build the query rewriting chain for academic web retrieval.
+
+    Args:
+        llm_model (str): OpenAI chat model name.
+
+    Returns:
+        Callable: Runnable chain that maps ``{question}`` to search query text.
+    """
+
     prompt = ChatPromptTemplate.from_messages(
         [
             (
