@@ -84,6 +84,70 @@ def add_pdf_to_db(db: Chroma, pdf_path: str) -> int:
     return res
 
 
+def _doc_dedupe_key(doc: Document) -> tuple[str, str, str, str]:
+    """Build a deterministic key to deduplicate retrieved chunks.
+
+    Args:
+        doc (Document): Retrieved LangChain document.
+
+    Returns:
+        tuple[str, str, str, str]: Key components based on metadata and content.
+    """
+
+    metadata = doc.metadata or dict()
+    doc_id = str(metadata.get("doc_id", ""))
+    filename_full = str(metadata.get("filename_full", metadata.get("source", "")))
+    page = str(metadata.get("page", ""))
+    snippet = doc.page_content[:300]
+
+    return doc_id, filename_full, page, snippet
+
+
+def _merge_ranked_results(
+    primary: list[tuple[Document, float]], secondary: list[tuple[Document, float]], top_k: int
+) -> list[tuple[Document, float]]:
+    """Merge two ranked retrieval results, deduplicate, and keep top-k by score.
+
+    Args:
+        primary (list[tuple[Document, float]]): First ranked result list.
+        secondary (list[tuple[Document, float]]): Second ranked result list.
+        top_k (int): Maximum number of merged items.
+
+    Returns:
+        list[tuple[Document, float]]: Merged and score-sorted retrieval results.
+    """
+
+    merged: dict[tuple[str, str, str, str], tuple[Document, float]] = dict()
+
+    for doc, score in primary + secondary:
+        key = _doc_dedupe_key(doc)
+        prev = merged.get(key)
+        if (not prev) or (score > prev[1]):
+            merged[key] = (doc, score)
+
+    res = sorted(merged.values(), key=lambda item: item[1], reverse=True)[:top_k]
+    return res
+
+
+def _rewrite_query_to_english(question: str) -> str:
+    """Rewrite a query into English keywords for multilingual retrieval.
+
+    Args:
+        question (str): Original user query.
+
+    Returns:
+        str: Rewritten English query. Returns the original question on failure.
+    """
+
+    try:
+        rewritten = QUERY_REWRITE_CHAIN.invoke({"question": question}).strip()
+        if rewritten and len(rewritten) <= 200:
+            return rewritten
+    except Exception as e:
+        print(f"[query_rewrite] failed: {repr(e)}")
+    return question
+
+
 def answer_from_db(
     db: Chroma, chain: Callable, raw_question: str, session_filter: Optional[dict[str, Any]] = None
 ) -> tuple[str, list[tuple[Document, float]], Optional[dict[str, Any]]]:
@@ -102,7 +166,15 @@ def answer_from_db(
 
     clean_question, inline_filter = parse_filter_from_question(raw_question)
     chroma_filter = merge_filters(inline_filter, session_filter)
-    docs_scores = retrieve_with_scores(db, clean_question, top_k=TOP_K, chroma_filter=chroma_filter)
+
+    docs_scores_primary = retrieve_with_scores(db, clean_question, top_k=TOP_K, chroma_filter=chroma_filter)
+    docs_scores = docs_scores_primary
+
+    if looks_korean(clean_question):
+        english_query = _rewrite_query_to_english(clean_question)
+        if english_query != clean_question:
+            docs_scores_secondary = retrieve_with_scores(db, english_query, top_k=TOP_K, chroma_filter=chroma_filter)
+            docs_scores = _merge_ranked_results(docs_scores_primary, docs_scores_secondary, top_k=TOP_K)
 
     if not docs_scores:
         res = (INSUFFICIENT_MSG, list(), chroma_filter)
@@ -232,15 +304,9 @@ def auto_fetch_and_ingest(db: Chroma, question: str) -> Optional[str]:
     res = ""
 
     search_query = question
-    try:
-        if looks_korean(question):
-            search_query = QUERY_REWRITE_CHAIN.invoke({"question": question}).strip()
-            print(f"search quer: {search_query}")
-            if not search_query or len(search_query) > 200:
-                search_query = question
-    except Exception as e:
-        print(f"[query_rewrite] failed: {repr(e)}")
-        search_query = question
+    if looks_korean(question):
+        search_query = _rewrite_query_to_english(question)
+        print(f"search query: {search_query}")
 
     # 1) PMC(PubMed Central, OA PDF)
     pmc_download_failures = 0
