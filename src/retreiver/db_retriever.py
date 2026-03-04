@@ -75,8 +75,6 @@ def retrieve_with_scores(
         list[tuple[Document, float]]: Retrieved documents with relevance scores.
     """
 
-    dense_res = list()
-    sparse_res = list()
     res = list()
 
     if chroma_filter:
