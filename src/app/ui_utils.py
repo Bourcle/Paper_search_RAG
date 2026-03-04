@@ -4,7 +4,7 @@ from pathlib import Path
 from config import INSUFFICIENT_MSG, QA_CHAIN
 from database.sessions import create_session, list_sessions, load_chat, delete_session, add_message, maybe_set_title
 from database.vector_db import answer_from_db, add_pdf_to_db, auto_fetch_and_ingest, VECTOR_DB
-from retreiver.pdf_utils import ensure_pdf
+from retriever.pdf_utils import ensure_pdf
 import gradio as gr
 
 NO_IMPROVEMENT_FETCH_CACHE: set[tuple[str, str]] = set()
