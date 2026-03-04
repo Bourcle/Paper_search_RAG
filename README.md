@@ -30,6 +30,8 @@ Gradio UI, Chroma 벡터DB, SQLite 세션 히스토리를 사용합니다.
 ├─ src/
 │  ├─ main.py                    # 앱 실행 엔트리포인트
 │  ├─ config.py                  # 전역 설정/프롬프트/체인 초기화
+│  ├─ chat_history.db            # SQLite 대화 이력(DB 실행 후 생성)
+│  ├─ chroma_db/                 # Chroma 영속 저장소(DB 실행 후 생성)
 │  ├─ app/
 │  │  ├─ app_process.py          # Gradio 컴포넌트 구성 및 이벤트 바인딩
 │  │  └─ ui_utils.py             # UI 액션 처리(전송/업로드/세션 핸들링)
@@ -43,12 +45,8 @@ Gradio UI, Chroma 벡터DB, SQLite 세션 히스토리를 사용합니다.
 │  └─ utils/
 │     └─ utils.py                # 질의 필터 파싱, 한국어 감지
 ├─ data/                         # 입력/자동 수집 문서 저장 디렉토리
-├─ chat_history.db               # SQLite 대화 이력(DB 실행 후 생성)
-├─ chroma_db/                    # Chroma 영속 저장소(DB 실행 후 생성)
 └─ README.md
 ```
-
-참고: 디렉토리명 `retreiver`는 일반적으로 `retriever` 철자를 쓰지만, 현재 코드는 `retreiver` 기준으로 import 되어 있습니다.
 
 ## 4. 동작 흐름
 
