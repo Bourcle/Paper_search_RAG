@@ -142,17 +142,18 @@ def get_search_queries(question: str) -> list[str]:
         list[str]: Ordered unique query list.
     """
 
-    if not looks_korean(question):
-        return [question]
+    res = list()
+    if looks_korean(question):
+        rewritten = _rewrite_query_to_english(question)
+        ordered = [rewritten, question] if rewritten and rewritten != question else [question]
 
-    rewritten = _rewrite_query_to_english(question)
-    ordered = [rewritten, question] if rewritten and rewritten != question else [question]
+        for query in ordered:
+            if query and query not in res:
+                res.append(query)
+    else:
+        res = [question]
 
-    deduped: list[str] = list()
-    for query in ordered:
-        if query and query not in deduped:
-            deduped.append(query)
-    return deduped
+    return res
 
 
 def is_candidate_relevant(query: str, candidate_text: str) -> bool:
@@ -192,6 +193,7 @@ def get_best_retrieval_score(db: Chroma, queries: list[str]) -> float:
         docs_scores = retrieve_with_scores(db, query, top_k=TOP_K, chroma_filter=None)
         score = max((value for _, value in docs_scores), default=0.0)
         best = max(best, score)
+
     return best
 
 
@@ -261,6 +263,7 @@ def answer_from_db(
         Answer text, retrieved docs with scores, and the merged filter.
     """
 
+    res = tuple()
     clean_question, inline_filter = parse_filter_from_question(raw_question)
     chroma_filter = merge_filters(inline_filter, session_filter)
     docs_scores = list()
@@ -351,6 +354,7 @@ def add_pubmed_abstracts_to_db(db: Chroma, papers: list[Any]) -> tuple[int, list
         documents, Chroma ids, and sparse chunk keys.
     """
 
+    res = tuple()
     docs = list()
     ids = list()
     chunk_keys = list()
@@ -392,7 +396,10 @@ def add_pubmed_abstracts_to_db(db: Chroma, papers: list[Any]) -> tuple[int, list
         db.add_documents(docs, ids=ids)
         for doc in docs:
             SPARSE_INDEX.upsert_document(doc)
-    return len(docs), ids, chunk_keys
+
+    res = (len(docs), ids, chunk_keys)
+
+    return res
 
 
 def auto_fetch_and_ingest(db: Chroma, question: str) -> Optional[str]:
@@ -428,7 +435,7 @@ def auto_fetch_and_ingest(db: Chroma, question: str) -> Optional[str]:
                 paper_key = f"pmc:{paper.pmcid}"
                 if paper_key in WEB_DOC_BLACKLIST:
                     continue
-                candidate_text = f"{paper.title} {paper.pmcid}"
+                candidate_text = f"{paper.title} {paper.pmcid} {paper.abstract}"
                 if not is_candidate_relevant(search_query, candidate_text):
                     continue
                 try:
