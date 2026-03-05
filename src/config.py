@@ -40,6 +40,9 @@ CHUNK_OVERLAP = 150
 
 TOP_K = 15  # Top k는 5 - 15 정도가 적당. 5는 너무 evidence가 적고, 20은 의미가 흐려지게 됨
 MIN_RELEVANCE = 0.2
+DENSE_K_MULTIPLIER = 10
+W_DENSE = 0.7
+W_SPARSE = 0.3
 
 AUTO_PAPERS_DIR = str(PROJECT_ROOT / "data" / "papers_auto")
 ARXIV_MAX_RESULTS = 5

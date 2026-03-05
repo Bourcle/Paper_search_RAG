@@ -21,5 +21,6 @@ dependencies = [
     "langgraph-checkpoint-sqlite>=3.0.3",
     "pypdf>=6.7.4",
     "python-dotenv>=1.2.1",
+    "rank-bm25>=0.2.2",
     "sentence-transformers>=5.2.3",
 ]
