@@ -8,6 +8,7 @@ Gradio UI, Chroma 벡터DB, SQLite 세션 히스토리를 사용합니다.
 - PDF 업로드 후 자동 청킹 및 벡터 인덱싱
 - 세션별 대화 이력 저장/불러오기/삭제
 - 메타데이터 필터 기반 질의 (`@file`, `@page`, `@doc_id`, `@filter`)
+- 검색: Chroma dense + local BM25 sparse 결합 (서버리스 하이브리드)
 - 근거 부족 시 웹 자동 보강
   - 1순위: PMC Open Access PDF
   - 2순위: PubMed Abstract
@@ -38,9 +39,9 @@ Gradio UI, Chroma 벡터DB, SQLite 세션 히스토리를 사용합니다.
 │  ├─ database/
 │  │  ├─ sessions.py             # SQLite 세션/메시지 CRUD
 │  │  └─ vector_db.py            # Chroma 열기, 검색/응답, 자동 수집/적재
-│  ├─ retreiver/
+│  ├─ retriever/
 │  │  ├─ pdf_utils.py            # PDF 검증/로딩/청킹/다운로드
-│  │  ├─ db_retriever.py         # 유사도 검색 및 context 포맷
+│  │  ├─ db_retriever.py         # Dense + BM25 하이브리드 검색 및 context 포맷
 │  │  └─ web_retriever.py        # arXiv/PMC/PubMed 검색
 │  └─ utils/
 │     └─ utils.py                # 질의 필터 파싱, 한국어 감지
@@ -51,7 +52,7 @@ Gradio UI, Chroma 벡터DB, SQLite 세션 히스토리를 사용합니다.
 ## 4. 동작 흐름
 
 1. 사용자가 질문을 보냄
-2. `answer_from_db()`에서 Chroma 유사도 검색 + 필터 병합
+2. `answer_from_db()`에서 dense 검색과 local BM25 sparse 검색을 함께 수행해 점수 결합
 3. 관련 문서 점수가 충분하면 QA 체인으로 답변 생성
 4. 근거 부족(`INSUFFICIENT_MSG`)이면 `auto_fetch_and_ingest()` 실행
 5. 웹 문서 인입 후 같은 질문으로 1회 재시도
@@ -128,6 +129,8 @@ python3 src/main.py
 - `DEFAULT_EMB_MODEL`: 임베딩 모델 (`BAAI/bge-m3`)
 - `DEFAULT_LLM_MODEL`: 답변 생성 모델 (`gpt-4o-mini`)
 - `TOP_K`: 검색 문서 수
+- `DENSE_K_MULTIPLIER`: dense 후보 배수 (`dense_k = TOP_K * multiplier`)
+- `W_DENSE`, `W_SPARSE`: 하이브리드 점수 가중치
 - `MIN_RELEVANCE`: 최소 관련도 임계값
 - `CHUNCK_SIZE`, `CHUNK_OVERLAP`: PDF 청킹 파라미터
 - `AUTO_PAPERS_DIR`: 웹 자동 수집 PDF 저장 경로
@@ -151,5 +154,11 @@ python3 src/main.py
 - 로깅 체계 표준화(`print` -> `logging`)
 - 예외 타입 세분화 및 사용자 메시지 정교화
 - 테스트 코드(단위/통합) 추가
-- `retreiver` 디렉토리명 정리(호환성 고려)
 
+## 13. 하이브리드 검색 테스트
+
+로컬 BM25 하이브리드 동작 예시는 아래 테스트로 확인할 수 있습니다.
+
+```bash
+python3 -m unittest tests/test_hybrid_retriever.py
+```
