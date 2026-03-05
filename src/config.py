@@ -45,6 +45,7 @@ W_DENSE = 0.7
 W_SPARSE = 0.3
 
 AUTO_PAPERS_DIR = str(PROJECT_ROOT / "data" / "papers_auto")
+SPARSE_DB_PATH = str(PROJECT_ROOT / "src" / "sparse_index.db")
 ARXIV_MAX_RESULTS = 5
 PMC_MAX_RESULTS = 20
 PUBMED_MAX_RESULTS = 20

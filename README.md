@@ -9,6 +9,7 @@ Gradio UI, Chroma 벡터DB, SQLite 세션 히스토리를 사용합니다.
 - 세션별 대화 이력 저장/불러오기/삭제
 - 메타데이터 필터 기반 질의 (`@file`, `@page`, `@doc_id`, `@filter`)
 - 검색: Chroma dense + local BM25 sparse 결합 (서버리스 하이브리드)
+  - Stage1에서 dense/sparse를 병렬 조회 후 점수 결합
 - 근거 부족 시 웹 자동 보강
   - 1순위: PMC Open Access PDF
   - 2순위: PubMed Abstract
@@ -41,7 +42,8 @@ Gradio UI, Chroma 벡터DB, SQLite 세션 히스토리를 사용합니다.
 │  │  └─ vector_db.py            # Chroma 열기, 검색/응답, 자동 수집/적재
 │  ├─ retriever/
 │  │  ├─ pdf_utils.py            # PDF 검증/로딩/청킹/다운로드
-│  │  ├─ db_retriever.py         # Dense + BM25 하이브리드 검색 및 context 포맷
+│  │  ├─ db_retriever.py         # Dense + Sparse 병렬 하이브리드 검색 및 context 포맷
+│  │  ├─ sparse_index.py         # SQLite FTS5 기반 증분 sparse 인덱스
 │  │  └─ web_retriever.py        # arXiv/PMC/PubMed 검색
 │  └─ utils/
 │     └─ utils.py                # 질의 필터 파싱, 한국어 감지
@@ -52,7 +54,7 @@ Gradio UI, Chroma 벡터DB, SQLite 세션 히스토리를 사용합니다.
 ## 4. 동작 흐름
 
 1. 사용자가 질문을 보냄
-2. `answer_from_db()`에서 dense 검색과 local BM25 sparse 검색을 함께 수행해 점수 결합
+2. `answer_from_db()`에서 dense/sparse를 Stage1 병렬 조회 후 점수 결합
 3. 관련 문서 점수가 충분하면 QA 체인으로 답변 생성
 4. 근거 부족(`INSUFFICIENT_MSG`)이면 `auto_fetch_and_ingest()` 실행
 5. 웹 문서 인입 후 같은 질문으로 1회 재시도
@@ -154,4 +156,3 @@ python3 src/main.py
 - 로깅 체계 표준화(`print` -> `logging`)
 - 예외 타입 세분화 및 사용자 메시지 정교화
 - 테스트 코드(단위/통합) 추가
-
