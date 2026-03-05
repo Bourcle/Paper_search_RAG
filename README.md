@@ -155,10 +155,3 @@ python3 src/main.py
 - 예외 타입 세분화 및 사용자 메시지 정교화
 - 테스트 코드(단위/통합) 추가
 
-## 13. 하이브리드 검색 테스트
-
-로컬 BM25 하이브리드 동작 예시는 아래 테스트로 확인할 수 있습니다.
-
-```bash
-python3 -m unittest tests/test_hybrid_retriever.py
-```
