@@ -67,6 +67,44 @@ class PmcPaper:
     title: str
     pmcid: str
     pdf_url: str
+    abstract: str
+
+
+def pmc_efetch_abstract(pmc_ids: list[str]) -> dict[str, str]:
+    """Fetch abstracts for PMC articles using the NCBI E-utilities efetch API.
+
+    Args:
+        pmc_ids (list[str]): A list of PMC article ids. Each will start with "PMC"
+        e.g. PMC123456
+
+    Returns:
+        dict[str, str]: A dictionary mapping each PMC_id to its extracted abstract text.
+    """
+
+    res = dict()
+
+    if not pmc_ids:
+        return res
+
+    url_ids = urllib.parse.quote(",".join(pmc_ids))
+    url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id={url_ids}&retmode=xml"
+    with urllib.request.urlopen(url, timeout=20) as response:
+        xml_text = response.read().decode("utf-8")
+
+    findable_xml = ET.fromstring(xml_text)
+
+    # article nodes
+    articles = findable_xml.findall(".//article")
+
+    for idx, pmc_id in enumerate(pmc_ids):
+        abstract_text = ""
+        if idx < len(articles):
+            abstract_nodes = articles[idx].findall(".//abstract")
+            if abstract_nodes:
+                abstract_text = " ".join("".join(node.itertext()) for node in abstract_nodes).strip()
+        res[pmc_id] = abstract_text
+
+    return res
 
 
 def pmc_search(query: str, max_results: int = PMC_MAX_RESULTS) -> list[PmcPaper]:
@@ -82,6 +120,7 @@ def pmc_search(query: str, max_results: int = PMC_MAX_RESULTS) -> list[PmcPaper]
 
     res = list()
 
+    pmc_ids = list()
     url_query = urllib.parse.quote(query)
     websearch = (
         "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
@@ -114,13 +153,22 @@ def pmc_search(query: str, max_results: int = PMC_MAX_RESULTS) -> list[PmcPaper]
                 break
         if not pmc_id:
             pmc_id = f"PMC{single_id}"
+            pmc_ids.append(pmc_id)
 
         # OA 서비스로 실제 PDF URL 획득
         pdf_url = _get_oa_pdf_url(pmc_id)
+        # abstract 획득
         if title and pdf_url:
-            res.append(PmcPaper(title=title, pmcid=pmc_id, pdf_url=pdf_url))
+            res.append(PmcPaper(title=title, pmcid=pmc_id, pdf_url=pdf_url, abstract=""))
         else:
             missing_pdf += 1
+
+    # add abstract
+    abstracts = pmc_efetch_abstract(pmc_ids)
+    print(f"[PMC] Successfully get abstract: {len(abstracts)}")
+    for pmc_paper in res:
+        abstract = abstracts.get(pmc_paper.pmcid, "")
+        pmc_paper.abstract = abstract
 
     if missing_pdf:
         print(f"[PMC] Could not find PDF URL: {missing_pdf}")

@@ -20,7 +20,8 @@ from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from retriever.pdf_utils import load_pdf_docs, split_docs, download_pdf_checked
 from retriever.web_retriever import arxiv_search, pmc_search, pubmed_search_abstracts
-from retriever.db_retriever import retrieve_with_scores, format_context, invalidate_sparse_index_cache
+from retriever.db_retriever import retrieve_with_scores, format_context
+from retriever.sparse_index import SPARSE_INDEX
 from utils.utils import parse_filter_from_question, looks_korean
 
 WEB_DOC_BLACKLIST: set[str] = set()
@@ -77,14 +78,21 @@ def add_pdf_to_db(db: Chroma, pdf_path: str) -> int:
     filename = Path(pdf_path).stem
     filename_full = Path(pdf_path).name
 
-    for chunk in chunked_docs:
+    for idx, chunk in enumerate(chunked_docs):
         chunk.metadata = dict(chunk.metadata or dict())
-        metadata = {"doc_id": document_id, "filename": filename, "filename_full": filename_full}
+        metadata = {
+            "doc_id": document_id,
+            "filename": filename,
+            "filename_full": filename_full,
+            "chunk_id": idx,
+            "chunk_key": f"{document_id}:{idx}",
+        }
         chunk.metadata.update(metadata)
 
     document_ids = [str(uuid.uuid4()) for _ in range(len(chunked_docs))]
     db.add_documents(chunked_docs, ids=document_ids)
-    invalidate_sparse_index_cache(db)
+    for chunk in chunked_docs:
+        SPARSE_INDEX.upsert_document(chunk)
     res = len(chunked_docs)
 
     return res
@@ -134,17 +142,18 @@ def get_search_queries(question: str) -> list[str]:
         list[str]: Ordered unique query list.
     """
 
-    if not looks_korean(question):
-        return [question]
+    res = list()
+    if looks_korean(question):
+        rewritten = _rewrite_query_to_english(question)
+        ordered = [rewritten, question] if rewritten and rewritten != question else [question]
 
-    rewritten = _rewrite_query_to_english(question)
-    ordered = [rewritten, question] if rewritten and rewritten != question else [question]
+        for query in ordered:
+            if query and query not in res:
+                res.append(query)
+    else:
+        res = [question]
 
-    deduped: list[str] = list()
-    for query in ordered:
-        if query and query not in deduped:
-            deduped.append(query)
-    return deduped
+    return res
 
 
 def is_candidate_relevant(query: str, candidate_text: str) -> bool:
@@ -184,6 +193,7 @@ def get_best_retrieval_score(db: Chroma, queries: list[str]) -> float:
         docs_scores = retrieve_with_scores(db, query, top_k=TOP_K, chroma_filter=None)
         score = max((value for _, value in docs_scores), default=0.0)
         best = max(best, score)
+
     return best
 
 
@@ -203,7 +213,7 @@ def remove_pdf_chunks_by_path(db: Chroma, pdf_path: str):
     ids = existing.get("ids", list())
     if ids:
         db.delete(ids=ids)
-        invalidate_sparse_index_cache(db)
+    SPARSE_INDEX.delete_by_filename(filename)
 
 
 def _looks_insufficient_answer(answer: str) -> bool:
@@ -253,6 +263,7 @@ def answer_from_db(
         Answer text, retrieved docs with scores, and the merged filter.
     """
 
+    res = tuple()
     clean_question, inline_filter = parse_filter_from_question(raw_question)
     chroma_filter = merge_filters(inline_filter, session_filter)
     docs_scores = list()
@@ -330,7 +341,7 @@ def merge_filters(
     return session_filter or inline_filter
 
 
-def add_pubmed_abstracts_to_db(db: Chroma, papers: list[Any]) -> tuple[int, list[str]]:
+def add_pubmed_abstracts_to_db(db: Chroma, papers: list[Any]) -> tuple[int, list[str], list[str]]:
     """Add PubMed abstract documents to the vector database.
 
     Args:
@@ -339,12 +350,14 @@ def add_pubmed_abstracts_to_db(db: Chroma, papers: list[Any]) -> tuple[int, list
             abstract, journal, and pub_date attributes.
 
     Returns:
-        tuple[int, list[str]]: Number of newly added abstract documents and
-        added document ids.
+        tuple[int, list[str], list[str]]: Number of newly added abstract
+        documents, Chroma ids, and sparse chunk keys.
     """
 
+    res = tuple()
     docs = list()
     ids = list()
+    chunk_keys = list()
 
     for paper in papers:
         # chroma db
@@ -367,6 +380,8 @@ def add_pubmed_abstracts_to_db(db: Chroma, papers: list[Any]) -> tuple[int, list
             "filename_full": f"pubmed_{paper.pmid}",
             "doc_id": f"pubmed-{paper.pmid}",
             "page": 0,
+            "chunk_id": 0,
+            "chunk_key": f"pubmed-{paper.pmid}:0",
         }
         docs.append(
             Document(
@@ -375,11 +390,16 @@ def add_pubmed_abstracts_to_db(db: Chroma, papers: list[Any]) -> tuple[int, list
             )
         )
         ids.append(metadata["doc_id"])
+        chunk_keys.append(metadata["chunk_key"])
 
     if docs:
         db.add_documents(docs, ids=ids)
-        invalidate_sparse_index_cache(db)
-    return len(docs), ids
+        for doc in docs:
+            SPARSE_INDEX.upsert_document(doc)
+
+    res = (len(docs), ids, chunk_keys)
+
+    return res
 
 
 def auto_fetch_and_ingest(db: Chroma, question: str) -> Optional[str]:
@@ -415,7 +435,7 @@ def auto_fetch_and_ingest(db: Chroma, question: str) -> Optional[str]:
                 paper_key = f"pmc:{paper.pmcid}"
                 if paper_key in WEB_DOC_BLACKLIST:
                     continue
-                candidate_text = f"{paper.title} {paper.pmcid}"
+                candidate_text = f"{paper.title} {paper.pmcid} {paper.abstract}"
                 if not is_candidate_relevant(search_query, candidate_text):
                     continue
                 try:
@@ -461,12 +481,13 @@ def auto_fetch_and_ingest(db: Chroma, question: str) -> Optional[str]:
                     continue
                 filtered_papers.append(paper)
 
-            added, added_ids = add_pubmed_abstracts_to_db(db, filtered_papers)
+            added, added_ids, added_chunk_keys = add_pubmed_abstracts_to_db(db, filtered_papers)
             if added > 0:
                 new_best_score = get_best_retrieval_score(db, search_queries)
                 if new_best_score <= (baseline_best_score + WEB_MIN_SCORE_IMPROVEMENT):
                     db.delete(ids=added_ids)
-                    invalidate_sparse_index_cache(db)
+                    for chunk_key in added_chunk_keys:
+                        SPARSE_INDEX.delete_by_chunk_key(chunk_key)
                     for paper in filtered_papers:
                         WEB_DOC_BLACKLIST.add(f"pubmed:{paper.pmid}")
                 else:
