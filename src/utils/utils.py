@@ -11,7 +11,7 @@ def looks_korean(text: str) -> bool:
         text (str): Input text to inspect.
 
     Returns:
-        bool: ``True`` if at least one Korean character exists, else ``False``.
+        bool: True if at least one Korean character exists, else False.
     """
     return bool(re.search(r"[가-힣]", text))
 
@@ -19,15 +19,15 @@ def looks_korean(text: str) -> bool:
 def parse_filter_from_question(question: str) -> tuple[str, Optional[dict[str, Any]]]:
     """Parse inline metadata filters from a user question.
 
-    Supports ``@filter={...}`` JSON syntax and token filters such as
-    ``@file=...``, ``@doc_id=...``, and ``@page=...`` at the end of a question.
+    Supports @filter={...} JSON syntax and token filters such as
+    @file=..., @doc_id=..., and @page=... at the end of a question.
 
     Args:
         question (str): Raw user question containing optional inline filter tokens.
 
     Returns:
         tuple[str, Optional[dict[str, Any]]]: A tuple of cleaned question text and
-        Chroma-compatible filter dictionary. Returns ``None`` for the filter if no
+        Chroma-compatible filter dictionary. Returns None for the filter if no
         valid filter is found.
     """
     parsed_filter: dict[str, Any] = dict()
