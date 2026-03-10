@@ -10,7 +10,7 @@ import gradio as gr
 NO_IMPROVEMENT_FETCH_CACHE: set[tuple[str, str]] = set()
 
 
-def _normalize_question_key(text: str) -> str:
+def normalize_question_key(text: str) -> str:
     """Normalize question text for cache key generation.
 
     Args:
@@ -23,11 +23,11 @@ def _normalize_question_key(text: str) -> str:
     return " ".join((text or "").strip().lower().split())
 
 
-def _build_fetch_status_note(fetch_result: str) -> str:
+def build_fetch_status_note(fetch_result: str) -> str:
     """Build a user-visible status message from fetch result markers.
 
     Args:
-        fetch_result (str): Result marker returned by ``auto_fetch_and_ingest``.
+        fetch_result (str): Result marker returned by auto_fetch_and_ingest.
 
     Returns:
         str: Status text for UI.
@@ -45,27 +45,6 @@ def _build_fetch_status_note(fetch_result: str) -> str:
     return f"Fetch result: {fetch_result}"
 
 
-def print_help():
-    """Print CLI help text for supported commands.
-
-    Args:
-        None.
-
-    Returns:
-        None: This function does not return a value.
-    """
-
-    print("\nHelp:")
-    print("  /add <pdf_path>        : Add PDF on Vector DB")
-    print("  /where <json_filter>   : Apply meta data filter on next question (Chroma filter grammar)")
-    print("  /clearwhere            : Clear filter")
-    print("  /exit                  : Exit")
-    print("\nIn-line filter is also available:")
-    print('  예) "Summerize the conclusion of this paper @file=paper.pdf"')
-    print('  예) "Experiment setting on p3? @file=paper.pdf @page=3"')
-    print('  예) "..." @filter={"filename":{"$eq":"paper"}}')
-
-
 def refresh_session_choices() -> list[tuple[str, str]]:
     """Build Gradio dropdown choices from stored sessions.
 
@@ -73,7 +52,7 @@ def refresh_session_choices() -> list[tuple[str, str]]:
         None.
 
     Returns:
-        list[tuple[str, str]]: List of ``(title, session_id)`` tuples.
+        list[tuple[str, str]]: List of (title, session_id) tuples.
     """
 
     sessions = list_sessions()
@@ -240,7 +219,7 @@ def ui_send(
 
     # if insufficient -> fetch paper -> retry once
     if ans == INSUFFICIENT_MSG:
-        question_key = _normalize_question_key(user_text)
+        question_key = normalize_question_key(user_text)
         fetch_cache_key = (session_id, question_key)
 
         if fetch_cache_key in NO_IMPROVEMENT_FETCH_CACHE:
@@ -264,7 +243,7 @@ def ui_send(
 
         downloaded = auto_fetch_and_ingest(VECTOR_DB, user_text)
         if downloaded:
-            note = _build_fetch_status_note(downloaded)
+            note = build_fetch_status_note(downloaded)
             yield session_id, chat, note, ""
             add_message(session_id, "assistant", note)
 
