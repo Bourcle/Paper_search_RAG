@@ -1,4 +1,4 @@
-# PDF RAG Chatbot (with Chat History)
+# BLINK
 
 업로드한 PDF와 자동 웹 검색(PMC/PubMed/arXiv) 기반으로 답변하는 **연구 보조형 RAG 챗봇**입니다.  
 Gradio UI, Chroma 벡터DB, SQLite 세션 히스토리를 사용합니다.
